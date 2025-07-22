@@ -1,11 +1,12 @@
 import telebot
 import sqlite3
 from datetime import datetime
+import os
 
 
-# 🔑 Сюди встав свій токен з BotFather
-TOKEN = '8166676015:AAFEe7Fcn8fkHd5ousoFP1eFOufkYAfDu_4'
 
+
+TOKEN = os.getenv('TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 conn = sqlite3.connect('expenses.db', check_same_thread=False)
