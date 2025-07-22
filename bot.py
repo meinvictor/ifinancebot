@@ -24,9 +24,9 @@ conn.commit()
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn_add = types.KeyboardButton('/add')
-    btn_stats = types.KeyboardButton('/stats')
-    btn_balance = types.KeyboardButton('/balance')
+    btn_add = types.KeyboardButton('Додати')
+    btn_stats = types.KeyboardButton('Статистика')
+    btn_balance = types.KeyboardButton('Баланс')
     markup.row(btn_add)
     markup.row(btn_stats, btn_balance)
 
