@@ -2,9 +2,7 @@ import telebot
 import sqlite3
 from datetime import datetime
 import os
-
-
-
+from telebot import types
 
 TOKEN = os.getenv('TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -22,9 +20,20 @@ cursor.execute('''
 ''')
 conn.commit()
 
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.send_message(message.chat.id, "👋 Привіт! Я бот для обліку витрат. Використовуй команду /add щоб додати витрати.")
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn_add = types.KeyboardButton('/add')
+    btn_stats = types.KeyboardButton('/stats')
+    btn_balance = types.KeyboardButton('/balance')
+    markup.row(btn_add)
+    markup.row(btn_stats, btn_balance)
+
+    bot.send_message(message.chat.id,
+                     "👋 Привіт! Я бот для обліку витрат.\nОберіть команду кнопкою або введіть її вручну.",
+                     reply_markup=markup)
+
 
 @bot.message_handler(commands=['add'])
 def add_expense(message):
@@ -63,6 +72,4 @@ def stats(message):
         text += f"— {category}: {total:.2f} грн\n"
     bot.send_message(message.chat.id, text)
 
-
-# 🔁 Запуск бота
 bot.polling()
