@@ -61,16 +61,17 @@ def load_data():
 def show_main_menu(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(
-        types.KeyboardButton('Дохід'),
         types.KeyboardButton('Розхід'),
-        types.KeyboardButton('Статистика'),
+        types.KeyboardButton('Дохід'),
         types.KeyboardButton('Баланс'),
+        types.KeyboardButton('Статистика'),
         types.KeyboardButton('Категорії'),
-        types.KeyboardButton('Видалити останню'),
         types.KeyboardButton('Мої витрати'),
-        types.KeyboardButton('Моя ціль')
+        types.KeyboardButton('Моя ціль'),
+        types.KeyboardButton('Видалити останню')
     )
     bot.send_message(chat_id, "Оберіть дію:", reply_markup=markup)
+
 
 
 
@@ -347,18 +348,13 @@ def generate_pie_chart(stat, chat_id):
     os.remove(path)
 
 # === Баланс ===
-@bot.message_handler(func=lambda m: m.text == 'Баланс')
+@bot.message_handler(func=lambda message: message.text == "Баланс")
 def balance(message):
     chat_id = message.chat.id
-    total_expenses = sum(e['amount'] for e in expenses.get(chat_id, []))
-    total_incomes = sum(i['amount'] for i in incomes.get(chat_id, []))
-    net_balance = total_incomes - total_expenses
-    bot.send_message(chat_id,
-        f"💰 Загальні доходи: {total_incomes:.2f} грн\n"
-        f"💸 Загальні витрати: {total_expenses:.2f} грн\n"
-        f"⚖️ Чистий баланс: {net_balance:.2f} грн"
-    )
-
+    total_income = sum(i["amount"] for i in incomes.get(chat_id, []))
+    total_expense = sum(e["amount"] for e in expenses.get(chat_id, []))
+    balance = total_income - total_expense
+    bot.send_message(chat_id, f"📊 Баланс: {balance:.2f} грн\n\n💵 Дохід: {total_income:.2f} грн\n💸 Витрати: {total_expense:.2f} грн")
 
 
 # === Категорії ===
