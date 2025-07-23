@@ -12,37 +12,81 @@ bot = telebot.TeleBot(TOKEN)
 
 # Тимчасове сховище витрат у памʼяті
 expenses = {}
+user_temp_data = {}
 
-# Обробка команди /start
+# Команда /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton('Додати')
-    btn2 = types.KeyboardButton('Статистика')
-    btn3 = types.KeyboardButton('Баланс')
-    markup.add(btn1, btn2, btn3)
+    markup.add(
+        types.KeyboardButton('Додати'),
+        types.KeyboardButton('Статистика'),
+        types.KeyboardButton('Баланс')
+    )
     bot.send_message(
         message.chat.id,
         "👋 Привіт! Я бот для обліку витрат.\nОбери дію кнопкою нижче або введи вручну.",
         reply_markup=markup
     )
 
-# Обробка кнопки "Додати"
+# ДОДАВАННЯ ВИТРАТ — крок 1: запит суми
 @bot.message_handler(func=lambda message: message.text == 'Додати')
 def handle_add_button(message):
-    bot.send_message(message.chat.id, "📝 Введи витрату у форматі: `сума категорія`\nНаприклад: `150 транспорт`")
+    bot.send_message(message.chat.id, "💵 Введи суму витрати:")
+    user_temp_data[message.chat.id] = {'step': 'awaiting_amount'}
 
-# Обробка кнопки "Статистика"
+# Обробка введеної суми — крок 2: вибір категорії
+@bot.message_handler(func=lambda message: user_temp_data.get(message.chat.id, {}).get('step') == 'awaiting_amount')
+def handle_amount_input(message):
+    try:
+        amount = float(message.text)
+        user_temp_data[message.chat.id]['amount'] = amount
+        user_temp_data[message.chat.id]['step'] = 'awaiting_category'
+
+        markup = types.InlineKeyboardMarkup()
+        for cat in ['Їжа', 'Транспорт', 'Покупки', 'Інше']:
+            markup.add(types.InlineKeyboardButton(text=cat, callback_data=f'category:{cat}'))
+
+        bot.send_message(message.chat.id, "📂 Вибери категорію:", reply_markup=markup)
+    except:
+        bot.send_message(message.chat.id, "❌ Введи суму числом (наприклад: 150)")
+
+# Обробка вибору категорії — крок 3: запис
+@bot.callback_query_handler(func=lambda call: call.data.startswith('category:'))
+def handle_category_selection(call):
+    chat_id = call.message.chat.id
+    category = call.data.split(':')[1]
+
+    amount = user_temp_data.get(chat_id, {}).get('amount')
+    if amount is None:
+        bot.send_message(chat_id, "⚠️ Сталася помилка. Спробуй ще раз натиснути 'Додати'")
+        return
+
+    if chat_id not in expenses:
+        expenses[chat_id] = []
+    expenses[chat_id].append({'amount': amount, 'category': category})
+
+    # Очистити тимчасові дані
+    user_temp_data.pop(chat_id, None)
+
+    bot.send_message(chat_id, f"✅ Додано: {amount:.2f} грн на \"{category}\"")
+
+# Кнопка "Статистика"
 @bot.message_handler(func=lambda message: message.text == 'Статистика')
 def handle_stats_button(message):
     show_stats(message)
 
-# Обробка кнопки "Баланс"
+# Кнопка "Баланс"
 @bot.message_handler(func=lambda message: message.text == 'Баланс')
 def handle_balance_button(message):
     show_balance(message)
 
-# Обробка текстового вводу витрати
+# Команда /add (залишається як альтернатива)
+@bot.message_handler(commands=['add'])
+def handle_add_command(message):
+    bot.send_message(message.chat.id, "📝 Введи витрату у форматі: `сума категорія`\nНаприклад: `150 транспорт`")
+
+# Прямий текстовий ввід у форматі "сума категорія"
 @bot.message_handler(func=lambda message: not message.text.startswith('/'))
 def handle_expense_input(message):
     try:
@@ -58,12 +102,7 @@ def handle_expense_input(message):
     except:
         bot.send_message(message.chat.id, "❌ Неправильний формат. Введи: `сума категорія`, наприклад: `100 їжа`")
 
-# Обробка команди /add (показує інструкцію)
-@bot.message_handler(commands=['add'])
-def handle_add_command(message):
-    bot.send_message(message.chat.id, "📝 Введи витрату у форматі: `сума категорія`\nНаприклад: `150 транспорт`")
-
-# Обробка команди /stats або кнопки "Статистика"
+# Статистика (через команду або кнопку)
 @bot.message_handler(commands=['stats'])
 def handle_stats_command(message):
     show_stats(message)
@@ -84,7 +123,7 @@ def show_stats(message):
         response += f"• {category}: {total:.2f} грн\n"
     bot.send_message(chat_id, response)
 
-# Обробка команди /balance або кнопки "Баланс"
+# Баланс (через команду або кнопку)
 @bot.message_handler(commands=['balance'])
 def handle_balance_command(message):
     show_balance(message)
