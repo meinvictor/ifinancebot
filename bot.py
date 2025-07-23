@@ -23,6 +23,7 @@ user_temp_data = {}
 user_categories = {}
 subscriptions = {}
 saving_goals = {}  # <--- цілі на накопичення
+income_data = {}  # або завантажуй із JSON, якщо ти це вже робиш
 
 # === Дефолтні категорії ===
 default_categories = ['Їжа', 'Транспорт', 'Покупки', 'Інше']
@@ -67,6 +68,7 @@ def show_main_menu(chat_id):
         types.KeyboardButton('Моя ціль')
     )
     bot.send_message(chat_id, "Оберіть дію:", reply_markup=markup)
+
 
 def send_welcome(message):
     show_main_menu(message.chat.id)
@@ -280,30 +282,37 @@ def income_start(message):
     user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
 
 
-
-
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_income_amount')
-def income_amount(message):
-    chat_id = str(message.chat.id)  # важливо використовувати str для збереження в JSON
+def income_amount_handler(message):
+    chat_id = str(message.chat.id)
     if message.text == "↩️ Назад":
-        user_temp_data.pop(chat_id, None)
-        show_main_menu(chat_id)
+        user_temp_data.pop(message.chat.id, None)
+        show_main_menu(message.chat.id)
         return
     try:
         amount = float(message.text)
         if chat_id not in income_data:
             income_data[chat_id] = []
-        income_data[chat_id].append(amount)
+        income_data[chat_id].append({
+            "amount": amount,
+            "date": datetime.now().isoformat()
+        })
         save_data()
-        bot.send_message(chat_id, f"✅ Додано дохід: {amount:.2f} грн")
-        user_temp_data.pop(chat_id, None)
-        show_main_menu(chat_id)
+        bot.send_message(message.chat.id, f"✅ Дохід {amount:.2f} грн додано.")
+        user_temp_data.pop(message.chat.id, None)
+        show_main_menu(message.chat.id)
     except ValueError:
-        bot.send_message(chat_id, "❌ Введи число.")
+        bot.send_message(message.chat.id, "❌ Введи число.")
+
 
 @bot.message_handler(func=lambda m: m.text == "Дохід")
 def income_button_handler(message):
-    income_start(message)
+    chat_id = message.chat.id
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("↩️ Назад")
+    bot.send_message(chat_id, "💵 Введи суму доходу або натисни «Назад»:", reply_markup=markup)
+    user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
+
 
 
 # === Статистика ===
