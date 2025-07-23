@@ -7,7 +7,7 @@ import json
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import threading
-import time as time_module  # щоб не плутати з datetime.time
+import time as time_module
 import pytz
 
 # === Завантаження токену ===
@@ -19,7 +19,7 @@ bot = telebot.TeleBot(TOKEN)
 expenses = defaultdict(list)
 user_temp_data = {}
 user_categories = {}
-subscriptions = {}  # для зберігання часу нагадувань користувачів
+subscriptions = {}
 
 # === Дефолтні категорії ===
 default_categories = ['Їжа', 'Транспорт', 'Покупки', 'Інше']
@@ -74,24 +74,25 @@ def send_welcome(message):
 def start_handler(message):
     send_welcome(message)
 
-# === Нагадування ===
+# === Нагадування (з Київським часом) ===
+
+kyiv_tz = pytz.timezone("Europe/Kyiv")
 
 def reminder_loop():
     while True:
-        now = datetime.now()
+        now_kyiv = datetime.now(kyiv_tz)
         for chat_id, remind_time_str in subscriptions.items():
             try:
                 remind_time = datetime.strptime(remind_time_str, "%H:%M").time()
             except:
                 continue
-            if now.time().hour == remind_time.hour and now.time().minute == remind_time.minute:
+            if now_kyiv.time().hour == remind_time.hour and now_kyiv.time().minute == remind_time.minute:
                 try:
                     bot.send_message(chat_id, "🔔 Не забудь внести витрати!")
                 except Exception as e:
                     print(f"Помилка відправки нагадування {chat_id}: {e}")
-        time_module.sleep(60)  # перевіряти кожну хвилину
+        time_module.sleep(60)
 
-# Запуск циклу нагадувань в окремому потоці
 threading.Thread(target=reminder_loop, daemon=True).start()
 
 @bot.message_handler(commands=['remind'])
@@ -99,13 +100,13 @@ def handle_remind(message):
     chat_id = message.chat.id
     args = message.text.split()
     if len(args) == 1:
-        bot.send_message(chat_id, "ℹ️ Використання:\n/remind on - ввімкнути нагадування о 20:00\n/remind off - вимкнути нагадування\n/remind HH:MM - встановити час нагадування")
+        bot.send_message(chat_id, "ℹ️ Використання:\n/remind on - увімкнути нагадування о 20:00 (Київ)\n/remind off - вимкнути\n/remind HH:MM - встановити час нагадування")
         return
     param = args[1].lower()
 
     if param == "on":
         subscriptions[chat_id] = "20:00"
-        bot.send_message(chat_id, "✅ Нагадування увімкнено на 20:00 щодня.")
+        bot.send_message(chat_id, "✅ Нагадування увімкнено на 20:00 (за Києвом).")
     elif param == "off":
         if chat_id in subscriptions:
             subscriptions.pop(chat_id)
@@ -113,13 +114,12 @@ def handle_remind(message):
         else:
             bot.send_message(chat_id, "ℹ️ Нагадування не було увімкнено.")
     else:
-        # перевірка формату часу
         try:
             dt = datetime.strptime(param, "%H:%M")
             subscriptions[chat_id] = param
-            bot.send_message(chat_id, f"✅ Нагадування встановлено на {param} щодня.")
+            bot.send_message(chat_id, f"✅ Нагадування встановлено на {param} (Київ).")
         except:
-            bot.send_message(chat_id, "❌ Невірний формат часу. Використай HH:MM (24-годинний формат).")
+            bot.send_message(chat_id, "❌ Невірний формат. Використай HH:MM (24-годинний формат).")
 
 # === Додати витрату ===
 @bot.message_handler(func=lambda m: m.text == 'Додати')
@@ -281,7 +281,7 @@ def delete_last(message):
     else:
         bot.send_message(chat_id, "⚠️ Немає витрат для видалення")
 
-# === Мої витрати (редагування і видалення) ===
+# === Мої витрати ===
 @bot.message_handler(func=lambda m: m.text == 'Мої витрати')
 def show_expense_history(message):
     chat_id = message.chat.id
