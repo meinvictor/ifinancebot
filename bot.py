@@ -3,6 +3,8 @@ import json
 import os
 from datetime import datetime
 from telebot import types
+from dotenv import load_dotenv
+
 
 # === Завантаження токену ===
 load_dotenv()
