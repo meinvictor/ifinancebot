@@ -57,7 +57,8 @@ def load_data():
 def show_main_menu(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(
-        types.KeyboardButton('Додати'),
+        types.KeyboardButton('Дохід'),
+        types.KeyboardButton('Розхід'),
         types.KeyboardButton('Статистика'),
         types.KeyboardButton('Баланс'),
         types.KeyboardButton('Категорії'),
@@ -268,7 +269,7 @@ def handle_category_or_cancel(call):
     bot.edit_message_text(f"✅ Додано: {amount:.2f} грн на \"{cat}\"", chat_id, call.message.message_id)
     bot.answer_callback_query(call.id)
 
-# === Додаввання доходу ===
+# === Додавання доходу ===
 
 @bot.message_handler(commands=['income'])
 def income_start(message):
@@ -278,16 +279,21 @@ def income_start(message):
     bot.send_message(chat_id, "💵 Введи суму доходу або скасуй:", reply_markup=markup)
     user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
 
+
+
+
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_income_amount')
 def income_amount(message):
-    chat_id = message.chat.id
+    chat_id = str(message.chat.id)  # важливо використовувати str для збереження в JSON
     if message.text == "↩️ Назад":
         user_temp_data.pop(chat_id, None)
         show_main_menu(chat_id)
         return
     try:
         amount = float(message.text)
-        incomes[chat_id].append({"amount": amount, "date": datetime.now().isoformat()})
+        if chat_id not in income_data:
+            income_data[chat_id] = []
+        income_data[chat_id].append(amount)
         save_data()
         bot.send_message(chat_id, f"✅ Додано дохід: {amount:.2f} грн")
         user_temp_data.pop(chat_id, None)
@@ -295,11 +301,10 @@ def income_amount(message):
     except ValueError:
         bot.send_message(chat_id, "❌ Введи число.")
 
-@bot.callback_query_handler(func=lambda call: call.data == "add_income")
-def handle_add_income(call):
-    chat_id = str(call.message.chat.id)
-    bot.send_message(chat_id, "💰 Введи суму доходу (наприклад, 15000):")
-    user_temp_data[chat_id] = {'step': 'add_income'}
+@bot.message_handler(func=lambda m: m.text == "Дохід")
+def income_button_handler(message):
+    income_start(message)
+
 
 # === Статистика ===
 @bot.message_handler(func=lambda m: m.text == 'Статистика')
@@ -341,6 +346,7 @@ def balance(message):
         f"💸 Загальні витрати: {total_expenses:.2f} грн\n"
         f"⚖️ Чистий баланс: {net_balance:.2f} грн"
     )
+
 
 
 # === Категорії ===
