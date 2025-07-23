@@ -39,7 +39,6 @@ def load_data():
 load_data()
 
 # === Стартове меню ===
-@bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(
@@ -56,14 +55,24 @@ def send_welcome(message):
         reply_markup=markup
     )
 
+@bot.message_handler(commands=['start'])
+def start_handler(message):
+    send_welcome(message)
+
 # === Додати витрату ===
 @bot.message_handler(func=lambda m: m.text == 'Додати')
 def handle_add(message):
-    bot.send_message(message.chat.id, "💵 Введи суму витрати:")
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("↩️ Назад")
+    bot.send_message(message.chat.id, "💵 Введи суму витрати або скасуй:", reply_markup=markup)
     user_temp_data[message.chat.id] = {'step': 'awaiting_amount'}
 
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_amount')
 def handle_amount(message):
+    if message.text == "↩️ Назад":
+        user_temp_data.pop(message.chat.id, None)
+        send_welcome(message)
+        return
     try:
         amount = float(message.text)
         user_temp_data[message.chat.id] = {'step': 'awaiting_category', 'amount': amount}
@@ -71,13 +80,21 @@ def handle_amount(message):
         markup = types.InlineKeyboardMarkup()
         for c in cats:
             markup.add(types.InlineKeyboardButton(c, callback_data=f'category:{c}'))
+        markup.add(types.InlineKeyboardButton("↩️ Назад", callback_data='cancel_add'))
         bot.send_message(message.chat.id, "📂 Вибери категорію:", reply_markup=markup)
     except:
         bot.send_message(message.chat.id, "❌ Введи суму числом.")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('category:'))
-def handle_category(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('category:') or call.data == 'cancel_add')
+def handle_category_or_cancel(call):
     chat_id = call.message.chat.id
+    if call.data == 'cancel_add':
+        user_temp_data.pop(chat_id, None)
+        bot.edit_message_text("❌ Додавання витрати скасовано.", chat_id, call.message.message_id)
+        send_welcome(call.message)
+        bot.answer_callback_query(call.id)
+        return
+
     cat = call.data.split(':')[1]
     data = user_temp_data.pop(chat_id, {})
     amount = data.get('amount')
@@ -86,7 +103,8 @@ def handle_category(call):
         return
     expenses[chat_id].append({"amount": amount, "category": cat, "date": datetime.now().isoformat()})
     save_data()
-    bot.send_message(chat_id, f"✅ Додано: {amount:.2f} грн на \"{cat}\"")
+    bot.edit_message_text(f"✅ Додано: {amount:.2f} грн на \"{cat}\"", chat_id, call.message.message_id)
+    bot.answer_callback_query(call.id)
 
 # === Статистика ===
 @bot.message_handler(func=lambda m: m.text == 'Статистика')
@@ -135,11 +153,17 @@ def categories(message):
 
 @bot.message_handler(func=lambda m: m.text == "➕ Додати категорію")
 def add_cat(message):
-    bot.send_message(message.chat.id, "✏️ Введи нову категорію:")
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("↩️ Назад")
+    bot.send_message(message.chat.id, "✏️ Введи нову категорію або скасуй:", reply_markup=markup)
     user_temp_data[message.chat.id] = {'step': 'new_category'}
 
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'new_category')
 def save_new_cat(message):
+    if message.text == "↩️ Назад":
+        user_temp_data.pop(message.chat.id, None)
+        send_welcome(message)
+        return
     cat = message.text.strip()
     chat_id = message.chat.id
     cats = user_categories.get(chat_id, default_categories.copy())
@@ -155,14 +179,19 @@ def save_new_cat(message):
 def delete_cat_start(message):
     chat_id = message.chat.id
     cats = user_categories.get(chat_id, default_categories.copy())
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     for c in cats:
         markup.add(c)
-    bot.send_message(chat_id, "🗑️ Вибери категорію для видалення:", reply_markup=markup)
+    markup.add("↩️ Назад")
+    bot.send_message(chat_id, "🗑️ Вибери категорію для видалення або скасуй:", reply_markup=markup)
     user_temp_data[chat_id] = {'step': 'delete_category'}
 
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'delete_category')
 def delete_cat(message):
+    if message.text == "↩️ Назад":
+        user_temp_data.pop(message.chat.id, None)
+        send_welcome(message)
+        return
     cat = message.text.strip()
     chat_id = message.chat.id
     cats = user_categories.get(chat_id, default_categories.copy())
@@ -176,6 +205,7 @@ def delete_cat(message):
 
 @bot.message_handler(func=lambda m: m.text == "↩️ Назад")
 def go_back(message):
+    user_temp_data.pop(message.chat.id, None)
     send_welcome(message)
 
 # === Видалити останню витрату ===
@@ -201,7 +231,7 @@ def show_expense_history(message):
 
     # Показуємо останні 5 витрат
     last_5 = user_expenses[-5:]
-    start_idx = len(user_expenses) - len(last_5)  # початковий індекс цих 5 елементів
+    start_idx = len(user_expenses) - len(last_5)
 
     for i, exp in enumerate(last_5, start=start_idx):
         text = f"{i+1}. 💸 {exp['amount']} грн — {exp['category']}\n🕓 {exp['date'][:16]}"
@@ -211,7 +241,6 @@ def show_expense_history(message):
             types.InlineKeyboardButton("🗑 Видалити", callback_data=f"delete:{i}")
         )
         bot.send_message(chat_id, text, reply_markup=markup)
-
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('edit:', 'delete:')))
 def handle_edit_or_delete(call):
