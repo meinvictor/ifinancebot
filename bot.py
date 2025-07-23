@@ -154,11 +154,19 @@ def show_goal_info(message):
 
 @bot.message_handler(func=lambda m: m.text == "Редагувати ціль")
 def edit_goal_from_menu(message):
-    set_goal_handler(message)
+    chat_id = message.chat.id
+    bot.send_message(chat_id, "📝 Введи нову суму для цілі (наприклад, 15000):")
+    user_temp_data[chat_id] = {'step': 'set_goal'}
 
 @bot.message_handler(func=lambda m: m.text == "Видалити ціль")
 def delete_goal_from_menu(message):
-    delete_goal_command(message)
+    chat_id = message.chat.id
+    if chat_id in saving_goals:
+        saving_goals.pop(chat_id)
+        save_data()
+        bot.send_message(chat_id, "🗑️ Ціль успішно видалено.")
+    else:
+        bot.send_message(chat_id, "⚠️ У вас немає встановленої цілі.")
 
 # === Нагадування (з Київським часом) ===
 
