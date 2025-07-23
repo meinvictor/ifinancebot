@@ -295,7 +295,11 @@ def income_amount(message):
     except ValueError:
         bot.send_message(chat_id, "❌ Введи число.")
 
-
+@bot.callback_query_handler(func=lambda call: call.data == "add_income")
+def handle_add_income(call):
+    chat_id = str(call.message.chat.id)
+    bot.send_message(chat_id, "💰 Введи суму доходу (наприклад, 15000):")
+    user_temp_data[chat_id] = {'step': 'add_income'}
 
 # === Статистика ===
 @bot.message_handler(func=lambda m: m.text == 'Статистика')
@@ -401,10 +405,20 @@ def delete_cat(message):
         bot.send_message(chat_id, "⚠️ Категорію не знайдено")
     user_temp_data.pop(chat_id, None)
 
+
+def show_categories(chat_id):
+    markup = types.InlineKeyboardMarkup()
+    for cat in categories:
+        markup.add(types.InlineKeyboardButton(text=cat, callback_data=f"category_{cat}"))
+    markup.add(types.InlineKeyboardButton(text="➕ Додати дохід", callback_data="add_income"))
+    bot.send_message(chat_id, "Вибери категорію витрат або додай дохід:", reply_markup=markup)
+
+
 @bot.message_handler(func=lambda m: m.text == "↩️ Назад")
 def go_back(message):
     user_temp_data.pop(message.chat.id, None)
     show_main_menu(message.chat.id)
+
 
 # === Видалити останню витрату ===
 @bot.message_handler(func=lambda m: m.text == 'Видалити останню')
@@ -483,6 +497,9 @@ def update_expense_amount(message):
         bot.send_message(chat_id, "❌ Введи число.")
     finally:
         user_temp_data.pop(chat_id, None)
+
+
+
 
 # === Запуск бота ===
 print("🤖 Бот запущено")
