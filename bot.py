@@ -2,7 +2,7 @@ import telebot
 from telebot import types
 import os
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 from collections import defaultdict
 import matplotlib.pyplot as plt
@@ -38,7 +38,7 @@ def load_data():
 
 load_data()
 
-# === Команди ===
+# === Стартове меню ===
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -47,7 +47,8 @@ def send_welcome(message):
         types.KeyboardButton('Статистика'),
         types.KeyboardButton('Баланс'),
         types.KeyboardButton('Категорії'),
-        types.KeyboardButton('Видалити останню')
+        types.KeyboardButton('Видалити останню'),
+        types.KeyboardButton('Мої витрати')
     )
     bot.send_message(
         message.chat.id,
@@ -55,35 +56,7 @@ def send_welcome(message):
         reply_markup=markup
     )
 
-@bot.message_handler(commands=['today'])
-def today_stats(message):
-    chat_id = message.chat.id
-    today = datetime.now().date()
-    today_exp = [e for e in expenses.get(chat_id, []) if datetime.fromisoformat(e['date']).date() == today]
-
-    if not today_exp:
-        bot.send_message(chat_id, "📅 Сьогодні витрат не було.")
-        return
-
-    stats = defaultdict(float)
-    for e in today_exp:
-        stats[e['category']] += e['amount']
-
-    text = "📅 Витрати за сьогодні:\n"
-    for cat, total in stats.items():
-        text += f"• {cat}: {total:.2f} грн\n"
-    bot.send_message(chat_id, text)
-
-@bot.message_handler(commands=['subscribe'])
-def subscribe(message):
-    subscriptions[message.chat.id] = True
-    bot.send_message(message.chat.id, "✅ Ви підписалися на щоденну статистику.")
-
-@bot.message_handler(commands=['unsubscribe'])
-def unsubscribe(message):
-    subscriptions.pop(message.chat.id, None)
-    bot.send_message(message.chat.id, "❌ Ви відписалися від щоденної статистики.")
-
+# === Додати витрату ===
 @bot.message_handler(func=lambda m: m.text == 'Додати')
 def handle_add(message):
     bot.send_message(message.chat.id, "💵 Введи суму витрати:")
@@ -115,6 +88,7 @@ def handle_category(call):
     save_data()
     bot.send_message(chat_id, f"✅ Додано: {amount:.2f} грн на \"{cat}\"")
 
+# === Статистика ===
 @bot.message_handler(func=lambda m: m.text == 'Статистика')
 def stats(message):
     chat_id = message.chat.id
@@ -142,12 +116,14 @@ def generate_pie_chart(stat, chat_id):
         bot.send_photo(chat_id, photo)
     os.remove(path)
 
+# === Баланс ===
 @bot.message_handler(func=lambda m: m.text == 'Баланс')
 def balance(message):
     chat_id = message.chat.id
     total = sum(e['amount'] for e in expenses.get(chat_id, []))
     bot.send_message(chat_id, f"💰 Загальні витрати: {total:.2f} грн")
 
+# === Категорії ===
 @bot.message_handler(func=lambda m: m.text == 'Категорії')
 def categories(message):
     chat_id = message.chat.id
@@ -202,6 +178,7 @@ def delete_cat(message):
 def go_back(message):
     send_welcome(message)
 
+# === Видалити останню витрату ===
 @bot.message_handler(func=lambda m: m.text == 'Видалити останню')
 def delete_last(message):
     chat_id = message.chat.id
@@ -212,6 +189,71 @@ def delete_last(message):
     else:
         bot.send_message(chat_id, "⚠️ Немає витрат для видалення")
 
-# Старт бота
+# === Мої витрати (редагування і видалення) ===
+@bot.message_handler(func=lambda m: m.text == 'Мої витрати')
+def show_expense_history(message):
+    chat_id = message.chat.id
+    user_expenses = expenses.get(chat_id, [])
+
+    if not user_expenses:
+        bot.send_message(chat_id, "📭 У вас поки немає витрат.")
+        return
+
+    # Показуємо останні 5 витрат
+    for i, exp in enumerate(user_expenses[-5:], start=1):
+        text = f"{i}. 💸 {exp['amount']} грн — {exp['category']}\n🕓 {exp['date'][:16]}"
+        markup = types.InlineKeyboardMarkup()
+        markup.add(
+            types.InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit:{-len(user_expenses)+i-1}"),
+            types.InlineKeyboardButton("🗑 Видалити", callback_data=f"delete:{-len(user_expenses)+i-1}")
+        )
+        bot.send_message(chat_id, text, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('edit:', 'delete:')))
+def handle_edit_or_delete(call):
+    chat_id = call.message.chat.id
+    data = call.data
+    action, idx_str = data.split(":")
+    idx = int(idx_str)
+
+    if chat_id not in expenses:
+        bot.answer_callback_query(call.id, "❌ Помилка: не знайдено.")
+        return
+
+    try:
+        exp = expenses[chat_id][idx]
+    except IndexError:
+        bot.answer_callback_query(call.id, "⚠️ Витрату не знайдено.")
+        return
+
+    if action == "delete":
+        deleted = expenses[chat_id].pop(idx)
+        save_data()
+        bot.edit_message_text(
+            f"🗑️ Видалено: {deleted['amount']} грн — {deleted['category']}",
+            chat_id, call.message.message_id
+        )
+        bot.answer_callback_query(call.id, "Витрату видалено")
+
+    elif action == "edit":
+        user_temp_data[chat_id] = {'step': 'edit_amount', 'idx': idx}
+        bot.send_message(chat_id, f"✏️ Введи нову суму для {exp['category']} (було {exp['amount']} грн):")
+        bot.answer_callback_query(call.id)
+
+@bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'edit_amount')
+def update_expense_amount(message):
+    chat_id = message.chat.id
+    try:
+        new_amount = float(message.text)
+        idx = user_temp_data[chat_id]['idx']
+        expenses[chat_id][idx]['amount'] = new_amount
+        save_data()
+        bot.send_message(chat_id, f"✅ Суму оновлено: {new_amount:.2f} грн")
+    except ValueError:
+        bot.send_message(chat_id, "❌ Введи число.")
+    finally:
+        user_temp_data.pop(chat_id, None)
+
+# === Запуск бота ===
 print("🤖 Бот запущено")
 bot.polling(none_stop=True)
