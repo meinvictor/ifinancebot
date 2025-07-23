@@ -200,14 +200,18 @@ def show_expense_history(message):
         return
 
     # Показуємо останні 5 витрат
-    for i, exp in enumerate(user_expenses[-5:], start=1):
-        text = f"{i}. 💸 {exp['amount']} грн — {exp['category']}\n🕓 {exp['date'][:16]}"
+    last_5 = user_expenses[-5:]
+    start_idx = len(user_expenses) - len(last_5)  # початковий індекс цих 5 елементів
+
+    for i, exp in enumerate(last_5, start=start_idx):
+        text = f"{i+1}. 💸 {exp['amount']} грн — {exp['category']}\n🕓 {exp['date'][:16]}"
         markup = types.InlineKeyboardMarkup()
         markup.add(
-            types.InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit:{-len(user_expenses)+i-1}"),
-            types.InlineKeyboardButton("🗑 Видалити", callback_data=f"delete:{-len(user_expenses)+i-1}")
+            types.InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit:{i}"),
+            types.InlineKeyboardButton("🗑 Видалити", callback_data=f"delete:{i}")
         )
         bot.send_message(chat_id, text, reply_markup=markup)
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith(('edit:', 'delete:')))
 def handle_edit_or_delete(call):
