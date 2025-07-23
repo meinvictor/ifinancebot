@@ -38,7 +38,20 @@ def load_data():
 
 load_data()
 
-# === Стартове меню ===
+# === Функція для показу головного меню без тексту ===
+def show_main_menu(chat_id):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(
+        types.KeyboardButton('Додати'),
+        types.KeyboardButton('Статистика'),
+        types.KeyboardButton('Баланс'),
+        types.KeyboardButton('Категорії'),
+        types.KeyboardButton('Видалити останню'),
+        types.KeyboardButton('Мої витрати')
+    )
+    bot.send_message(chat_id, "Оберіть дію:", reply_markup=markup)
+
+# === Стартове меню з привітанням ===
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(
@@ -71,7 +84,7 @@ def handle_add(message):
 def handle_amount(message):
     if message.text == "↩️ Назад":
         user_temp_data.pop(message.chat.id, None)
-        send_welcome(message)
+        show_main_menu(message.chat.id)
         return
     try:
         amount = float(message.text)
@@ -91,7 +104,7 @@ def handle_category_or_cancel(call):
     if call.data == 'cancel_add':
         user_temp_data.pop(chat_id, None)
         bot.edit_message_text("❌ Додавання витрати скасовано.", chat_id, call.message.message_id)
-        send_welcome(call.message)
+        show_main_menu(chat_id)
         bot.answer_callback_query(call.id)
         return
 
@@ -162,7 +175,7 @@ def add_cat(message):
 def save_new_cat(message):
     if message.text == "↩️ Назад":
         user_temp_data.pop(message.chat.id, None)
-        send_welcome(message)
+        show_main_menu(message.chat.id)
         return
     cat = message.text.strip()
     chat_id = message.chat.id
@@ -190,7 +203,7 @@ def delete_cat_start(message):
 def delete_cat(message):
     if message.text == "↩️ Назад":
         user_temp_data.pop(message.chat.id, None)
-        send_welcome(message)
+        show_main_menu(message.chat.id)
         return
     cat = message.text.strip()
     chat_id = message.chat.id
@@ -206,7 +219,7 @@ def delete_cat(message):
 @bot.message_handler(func=lambda m: m.text == "↩️ Назад")
 def go_back(message):
     user_temp_data.pop(message.chat.id, None)
-    send_welcome(message)
+    show_main_menu(message.chat.id)
 
 # === Видалити останню витрату ===
 @bot.message_handler(func=lambda m: m.text == 'Видалити останню')
