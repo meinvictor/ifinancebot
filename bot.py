@@ -17,6 +17,8 @@ bot = telebot.TeleBot(TOKEN)
 
 # === Дані користувачів ===
 expenses = defaultdict(list)
+incomes = defaultdict(list)
+
 user_temp_data = {}
 user_categories = {}
 subscriptions = {}
@@ -30,12 +32,13 @@ def save_data():
     data = {
         "expenses": expenses,
         "goals": saving_goals,
+        "incomes": incomes,
     }
     with open("expenses.json", "w") as f:
         json.dump(data, f, indent=2, default=str)
 
 def load_data():
-    global expenses, saving_goals
+    global expenses, saving_goals, incomes
     if os.path.exists("expenses.json"):
         with open("expenses.json", "r") as f:
             data = json.load(f)
@@ -44,8 +47,11 @@ def load_data():
                     {"amount": float(i['amount']), "category": i['category'], "date": i['date']} for i in items
                 ]
             saving_goals = {int(k): float(v) for k, v in data.get("goals", {}).items()}
+            for chat_id, items in data.get("incomes", {}).items():
+                incomes[int(chat_id)] = [
+                    {"amount": float(i['amount']), "date": i['date']} for i in items
+                ]
 
-load_data()
 
 # === Меню ===
 def show_main_menu(chat_id):
@@ -262,6 +268,35 @@ def handle_category_or_cancel(call):
     bot.edit_message_text(f"✅ Додано: {amount:.2f} грн на \"{cat}\"", chat_id, call.message.message_id)
     bot.answer_callback_query(call.id)
 
+# === Додаввання доходу ===
+
+@bot.message_handler(commands=['income'])
+def income_start(message):
+    chat_id = message.chat.id
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("↩️ Назад")
+    bot.send_message(chat_id, "💵 Введи суму доходу або скасуй:", reply_markup=markup)
+    user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
+
+@bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_income_amount')
+def income_amount(message):
+    chat_id = message.chat.id
+    if message.text == "↩️ Назад":
+        user_temp_data.pop(chat_id, None)
+        show_main_menu(chat_id)
+        return
+    try:
+        amount = float(message.text)
+        incomes[chat_id].append({"amount": amount, "date": datetime.now().isoformat()})
+        save_data()
+        bot.send_message(chat_id, f"✅ Додано дохід: {amount:.2f} грн")
+        user_temp_data.pop(chat_id, None)
+        show_main_menu(chat_id)
+    except ValueError:
+        bot.send_message(chat_id, "❌ Введи число.")
+
+
+
 # === Статистика ===
 @bot.message_handler(func=lambda m: m.text == 'Статистика')
 def stats(message):
@@ -294,8 +329,15 @@ def generate_pie_chart(stat, chat_id):
 @bot.message_handler(func=lambda m: m.text == 'Баланс')
 def balance(message):
     chat_id = message.chat.id
-    total = sum(e['amount'] for e in expenses.get(chat_id, []))
-    bot.send_message(chat_id, f"💰 Загальні витрати: {total:.2f} грн")
+    total_expenses = sum(e['amount'] for e in expenses.get(chat_id, []))
+    total_incomes = sum(i['amount'] for i in incomes.get(chat_id, []))
+    net_balance = total_incomes - total_expenses
+    bot.send_message(chat_id,
+        f"💰 Загальні доходи: {total_incomes:.2f} грн\n"
+        f"💸 Загальні витрати: {total_expenses:.2f} грн\n"
+        f"⚖️ Чистий баланс: {net_balance:.2f} грн"
+    )
+
 
 # === Категорії ===
 @bot.message_handler(func=lambda m: m.text == 'Категорії')
