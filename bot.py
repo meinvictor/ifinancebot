@@ -1,92 +1,81 @@
 import telebot
-import sqlite3
-from datetime import datetime
-import os
 from telebot import types
+import os
+from dotenv import load_dotenv
 
-TOKEN = os.getenv('TOKEN')
+load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN")
+
 bot = telebot.TeleBot(TOKEN)
 
-# Підключення до бази даних
-conn = sqlite3.connect('expenses.db', check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute('''
-    CREATE TABLE IF NOT EXISTS expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        amount REAL,
-        category TEXT,
-        date TEXT
-    )
-''')
-conn.commit()
+# Словник для збереження витрат (тимчасово)
+expenses = {}
 
-# Старт з клавіатурою
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn_start = types.KeyboardButton('Старт')
-    btn_stats = types.KeyboardButton('Статистика')
-    btn_balance = types.KeyboardButton('Баланс')
-    markup.row(btn_start)
-    markup.row(btn_stats, btn_balance)
+    btn1 = types.KeyboardButton('Додати')
+    btn2 = types.KeyboardButton('Статистика')
+    btn3 = types.KeyboardButton('Баланс')
+    markup.add(btn1, btn2, btn3)
+    bot.send_message(message.chat.id, "👋 Привіт! Обери дію:", reply_markup=markup)
 
-    bot.send_message(message.chat.id,
-                     "👋 Привіт! Я бот для обліку витрат.\nОберіть дію з меню нижче ⬇️",
-                     reply_markup=markup)
-
-# Обробка кнопок
-@bot.message_handler(func=lambda message: message.text == 'Старт')
-def handle_start_button(message):
-    send_welcome(message)
+@bot.message_handler(func=lambda message: message.text == 'Додати')
+def handle_add_button(message):
+    bot.send_message(message.chat.id, "📝 Введи витрату у форматі: сума категорія (наприклад: `200 їжа`)")
 
 @bot.message_handler(func=lambda message: message.text == 'Статистика')
 def handle_stats_button(message):
-    stats(message)
+    bot.send_message(message.chat.id, "/stats")
 
 @bot.message_handler(func=lambda message: message.text == 'Баланс')
 def handle_balance_button(message):
-    balance(message)
+    bot.send_message(message.chat.id, "/balance")
 
-# Додавання витрат
 @bot.message_handler(commands=['add'])
-def add_expense(message):
+def handle_add_command(message):
+    bot.send_message(message.chat.id, "📝 Введи витрату у форматі: сума категорія (наприклад: `200 їжа`)")
+
+@bot.message_handler(func=lambda message: message.text.startswith('/') is False)
+def handle_expense_input(message):
     try:
-        _, amount, *category = message.text.split()
+        amount, category = message.text.split(maxsplit=1)
         amount = float(amount)
-        category = ' '.join(category)
-        date = datetime.now().strftime("%Y-%m-%d")
-        user_id = message.from_user.id
-        cursor.execute("INSERT INTO expenses (user_id, amount, category, date) VALUES (?, ?, ?, ?)",
-                       (user_id, amount, category, date))
-        conn.commit()
-        bot.send_message(message.chat.id, f"✅ Додано {amount} грн у категорію '{category}'")
+        chat_id = message.chat.id
+
+        if chat_id not in expenses:
+            expenses[chat_id] = []
+
+        expenses[chat_id].append({'amount': amount, 'category': category})
+        bot.send_message(chat_id, f"✅ Додано: {amount} грн на '{category}'")
     except:
-        bot.send_message(message.chat.id, "⚠️ Приклад: /add 150 Продукти")
+        bot.send_message(message.chat.id, "❌ Неправильний формат. Введи: сума категорія (наприклад: `100 транспорт`)")
 
-# Баланс за сьогодні
-@bot.message_handler(commands=['balance'])
-def balance(message):
-    user_id = message.from_user.id
-    today = datetime.now().strftime("%Y-%m-%d")
-    cursor.execute("SELECT SUM(amount) FROM expenses WHERE user_id = ? AND date = ?", (user_id, today))
-    total = cursor.fetchone()[0]
-    total = total if total else 0
-    bot.send_message(message.chat.id, f"💰 Сьогодні ти витратив: {total:.2f} грн")
-
-# Статистика по категоріях
 @bot.message_handler(commands=['stats'])
-def stats(message):
-    user_id = message.from_user.id
-    cursor.execute("SELECT category, SUM(amount) FROM expenses WHERE user_id = ? GROUP BY category", (user_id,))
-    data = cursor.fetchall()
-    if not data:
-        bot.send_message(message.chat.id, "🔍 Ще немає статистики.")
+def handle_stats(message):
+    chat_id = message.chat.id
+    if chat_id not in expenses or not expenses[chat_id]:
+        bot.send_message(chat_id, "📊 Статистика поки порожня.")
         return
-    text = "📊 Твоя статистика витрат:\n"
-    for category, total in data:
-        text += f"— {category}: {total:.2f} грн\n"
-    bot.send_message(message.chat.id, text)
 
-# Запуск бота
+    stats = {}
+    for item in expenses[chat_id]:
+        category = item['category']
+        stats[category] = stats.get(category, 0) + item['amount']
+
+    response = "📈 Статистика витрат:\n"
+    for category, total in stats.items():
+        response += f"• {category}: {total} грн\n"
+    bot.send_message(chat_id, response)
+
+@bot.message_handler(commands=['balance'])
+def handle_balance(message):
+    chat_id = message.chat.id
+    if chat_id not in expenses or not expenses[chat_id]:
+        bot.send_message(chat_id, "💰 Баланс: 0 грн")
+        return
+
+    total = sum(item['amount'] for item in expenses[chat_id])
+    bot.send_message(chat_id, f"💰 Загальні витрати: {total} грн")
+
 bot.polling()
