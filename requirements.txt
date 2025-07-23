@@ -1,2 +1,5 @@
 pyTelegramBotAPI
 python-dotenv
+python-telegram-bot
+matplotlib
+apscheduler
