@@ -23,7 +23,8 @@ user_temp_data = {}
 user_categories = {}
 subscriptions = {}
 saving_goals = {}  # <--- цілі на накопичення
-income_data = {}  # або завантажуй із JSON, якщо ти це вже робиш
+income_data = {}
+user_temp_data = {}
 
 # === Дефолтні категорії ===
 default_categories = ['Їжа', 'Транспорт', 'Покупки', 'Інше']
@@ -37,6 +38,8 @@ def save_data():
     }
     with open("expenses.json", "w") as f:
         json.dump(data, f, indent=2, default=str)
+    with open('income.json', 'w') as f:
+        json.dump(income_data, f)
 
 def load_data():
     global expenses, saving_goals, incomes
@@ -68,6 +71,7 @@ def show_main_menu(chat_id):
         types.KeyboardButton('Моя ціль')
     )
     bot.send_message(chat_id, "Оберіть дію:", reply_markup=markup)
+
 
 
 def send_welcome(message):
@@ -281,6 +285,13 @@ def income_start(message):
     bot.send_message(chat_id, "💵 Введи суму доходу або скасуй:", reply_markup=markup)
     user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
 
+@bot.message_handler(func=lambda m: m.text == "Дохід")
+def income_button_handler(message):
+    chat_id = message.chat.id
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add("↩️ Назад")
+    bot.send_message(chat_id, "💵 Введи суму доходу або натисни «Назад»:", reply_markup=markup)
+    user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
 
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_income_amount')
 def income_amount_handler(message):
@@ -304,14 +315,6 @@ def income_amount_handler(message):
     except ValueError:
         bot.send_message(message.chat.id, "❌ Введи число.")
 
-
-@bot.message_handler(func=lambda m: m.text == "Дохід")
-def income_button_handler(message):
-    chat_id = message.chat.id
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add("↩️ Назад")
-    bot.send_message(chat_id, "💵 Введи суму доходу або натисни «Назад»:", reply_markup=markup)
-    user_temp_data[chat_id] = {'step': 'awaiting_income_amount'}
 
 
 
