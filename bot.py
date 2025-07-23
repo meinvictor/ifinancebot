@@ -20,24 +20,30 @@ expenses = defaultdict(list)
 user_temp_data = {}
 user_categories = {}
 subscriptions = {}
+saving_goals = {}  # <--- цілі на накопичення
 
 # === Дефолтні категорії ===
 default_categories = ['Їжа', 'Транспорт', 'Покупки', 'Інше']
 
-# === Допоміжні функції ===
+# === Збереження та завантаження ===
 def save_data():
+    data = {
+        "expenses": expenses,
+        "goals": saving_goals,
+    }
     with open("expenses.json", "w") as f:
-        json.dump(expenses, f, indent=2, default=str)
+        json.dump(data, f, indent=2, default=str)
 
 def load_data():
-    global expenses
+    global expenses, saving_goals
     if os.path.exists("expenses.json"):
         with open("expenses.json", "r") as f:
             data = json.load(f)
-            for chat_id, items in data.items():
+            for chat_id, items in data.get("expenses", {}).items():
                 expenses[int(chat_id)] = [
                     {"amount": float(i['amount']), "category": i['category'], "date": i['date']} for i in items
                 ]
+            saving_goals = {int(k): float(v) for k, v in data.get("goals", {}).items()}
 
 load_data()
 
@@ -50,29 +56,92 @@ def show_main_menu(chat_id):
         types.KeyboardButton('Баланс'),
         types.KeyboardButton('Категорії'),
         types.KeyboardButton('Видалити останню'),
-        types.KeyboardButton('Мої витрати')
+        types.KeyboardButton('Мої витрати'),
+        types.KeyboardButton('Моя ціль')
     )
     bot.send_message(chat_id, "Оберіть дію:", reply_markup=markup)
 
 def send_welcome(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(
-        types.KeyboardButton('Додати'),
-        types.KeyboardButton('Статистика'),
-        types.KeyboardButton('Баланс'),
-        types.KeyboardButton('Категорії'),
-        types.KeyboardButton('Видалити останню'),
-        types.KeyboardButton('Мої витрати')
-    )
+    show_main_menu(message.chat.id)
     bot.send_message(
         message.chat.id,
-        "👋 Привіт! Я бот для обліку витрат.\nОбери дію кнопкою нижче або введи вручну.",
-        reply_markup=markup
+        "👋 Привіт! Я бот для обліку витрат. Обери дію нижче або введи вручну."
     )
 
 @bot.message_handler(commands=['start'])
 def start_handler(message):
     send_welcome(message)
+
+# === Команди /goal ===
+@bot.message_handler(commands=['goal'])
+def handle_goal_command(message):
+    chat_id = message.chat.id
+    if chat_id in saving_goals:
+        bot.send_message(chat_id, f"🎯 Ваша ціль: {saving_goals[chat_id]:.2f} грн\nВикористай:\n/goal edit - змінити\n/goal delete - видалити")
+    else:
+        bot.send_message(chat_id, "🎯 У вас немає встановленої цілі. Введіть /goal set щоб встановити.")
+
+@bot.message_handler(commands=['goal_set', 'goal_set@your_bot_username'])  # для кнопки /goal set
+def set_goal_handler(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, "📝 Введи суму для цілі (наприклад, 10000):")
+    user_temp_data[chat_id] = {'step': 'set_goal'}
+
+@bot.message_handler(commands=['goal', 'goal edit'])
+def edit_goal_command(message):
+    set_goal_handler(message)
+
+@bot.message_handler(commands=['goal delete'])
+def delete_goal_command(message):
+    chat_id = message.chat.id
+    if chat_id in saving_goals:
+        saving_goals.pop(chat_id)
+        save_data()
+        bot.send_message(chat_id, "🗑️ Ціль видалено.")
+    else:
+        bot.send_message(chat_id, "⚠️ У вас немає встановленої цілі.")
+
+# === Обробка введеної цілі ===
+@bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'set_goal')
+def save_goal_amount(message):
+    chat_id = message.chat.id
+    try:
+        goal = float(message.text)
+        saving_goals[chat_id] = goal
+        save_data()
+        bot.send_message(chat_id, f"✅ Ціль встановлено: {goal:.2f} грн")
+    except:
+        bot.send_message(chat_id, "❌ Введіть число.")
+    user_temp_data.pop(chat_id, None)
+
+# === Моя ціль (кнопка) ===
+@bot.message_handler(func=lambda m: m.text == 'Моя ціль')
+def show_goal_info(message):
+    chat_id = message.chat.id
+    goal = saving_goals.get(chat_id)
+    total_spent = sum(e['amount'] for e in expenses.get(chat_id, []))
+    if goal:
+        percent = min(100, total_spent / goal * 100)
+        remaining = max(0, goal - total_spent)
+        text = (
+            f"🎯 Ваша ціль: {goal:.2f} грн\n"
+            f"💸 Витрачено: {total_spent:.2f} грн\n"
+            f"📊 Прогрес: {percent:.1f}%\n"
+            f"🔒 Залишилось: {remaining:.2f} грн"
+        )
+    else:
+        text = "⚠️ У вас немає встановленої цілі. Введіть /goal set щоб створити."
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Редагувати ціль", "Видалити ціль", "↩️ Назад")
+    bot.send_message(chat_id, text, reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.text == "Редагувати ціль")
+def edit_goal_from_menu(message):
+    set_goal_handler(message)
+
+@bot.message_handler(func=lambda m: m.text == "Видалити ціль")
+def delete_goal_from_menu(message):
+    delete_goal_command(message)
 
 # === Нагадування (з Київським часом) ===
 
