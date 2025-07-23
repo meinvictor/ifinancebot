@@ -1,46 +1,42 @@
-import os
-import json
-from datetime import datetime
 import telebot
 from telebot import types
-from dotenv import load_dotenv
+from datetime import datetime
+import json
+import os
+import matplotlib.pyplot as plt
 
-load_dotenv()
-
-BOT_TOKEN = os.getenv("TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
-
-expenses = {}
-incomes = {}
-savings_goals = {}
-user_temp_data = {}
+TOKEN = os.getenv("TOKEN")
+bot = telebot.TeleBot(TOKEN)
 
 DATA_FILE = 'data.json'
 
-# ---------- ЗБЕРЕЖЕННЯ / ЗАВАНТАЖЕННЯ ----------
+expenses = {}
+incomes = {}
+user_temp_data = {}
+
 def save_data():
     with open(DATA_FILE, 'w') as f:
-        json.dump({"expenses": expenses, "incomes": incomes, "savings_goals": savings_goals}, f)
+        json.dump({'expenses': expenses, 'incomes': incomes}, f)
 
 def load_data():
-    global expenses, incomes, savings_goals
+    global expenses, incomes
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE) as f:
+        with open(DATA_FILE, 'r') as f:
             data = json.load(f)
-            expenses = data.get("expenses", {})
-            incomes = data.get("incomes", {})
-            savings_goals = data.get("savings_goals", {})
+            expenses = data.get('expenses', {})
+            incomes = data.get('incomes', {})
 
 load_data()
 
-# ---------- ГОЛОВНЕ МЕНЮ ----------
 def show_main_menu(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(
         types.KeyboardButton('Дохід'),
         types.KeyboardButton('Розхід'),
         types.KeyboardButton('Статистика'),
-        types.KeyboardButton('Баланс'),
+        types.KeyboardButton('Баланс')
+    )
+    markup.add(
         types.KeyboardButton('Категорії'),
         types.KeyboardButton('Видалити останню'),
         types.KeyboardButton('Мої витрати'),
@@ -48,17 +44,14 @@ def show_main_menu(chat_id):
     )
     bot.send_message(chat_id, "Оберіть дію:", reply_markup=markup)
 
-# ---------- СТАРТ ----------
 @bot.message_handler(commands=['start'])
 def start(message):
     chat_id = str(message.chat.id)
     expenses.setdefault(chat_id, [])
     incomes.setdefault(chat_id, [])
-    savings_goals.setdefault(chat_id, None)
-    show_main_menu(chat_id)
+    show_main_menu(message.chat.id)
 
-# ---------- ДОХІД ----------
-@bot.message_handler(func=lambda m: m.text == "Дохід")
+@bot.message_handler(func=lambda message: message.text == 'Дохід')
 def income_start(message):
     chat_id = message.chat.id
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -83,13 +76,12 @@ def income_amount(message):
     except ValueError:
         bot.send_message(chat_id, "❌ Введи число.")
 
-# ---------- РОЗХІД ----------
-@bot.message_handler(func=lambda m: m.text == "Розхід")
+@bot.message_handler(func=lambda message: message.text == 'Розхід')
 def expense_start(message):
     chat_id = message.chat.id
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add("↩️ Назад")
-    bot.send_message(chat_id, "💸 Введи суму витрати:", reply_markup=markup)
+    bot.send_message(chat_id, "💸 Введи суму витрати або скасуй:", reply_markup=markup)
     user_temp_data[chat_id] = {'step': 'awaiting_expense_amount'}
 
 @bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_expense_amount')
@@ -109,86 +101,51 @@ def expense_amount(message):
     except ValueError:
         bot.send_message(chat_id, "❌ Введи число.")
 
-# ---------- СТАТИСТИКА ----------
-@bot.message_handler(func=lambda m: m.text == "Статистика")
-def show_stats(message):
-    chat_id = str(message.chat.id)
-    total_exp = sum(e['amount'] for e in expenses.get(chat_id, []))
-    total_inc = sum(i['amount'] for i in incomes.get(chat_id, []))
-    bot.send_message(message.chat.id, f"📊 Статистика:\nЗагальний дохід: {total_inc:.2f} грн\nЗагальні витрати: {total_exp:.2f} грн")
-
-# ---------- БАЛАНС ----------
-@bot.message_handler(func=lambda m: m.text == "Баланс")
+@bot.message_handler(func=lambda message: message.text == 'Баланс')
 def show_balance(message):
     chat_id = str(message.chat.id)
-    total_exp = sum(e['amount'] for e in expenses.get(chat_id, []))
-    total_inc = sum(i['amount'] for i in incomes.get(chat_id, []))
-    balance = total_inc - total_exp
-    bot.send_message(message.chat.id, f"💰 Баланс: {balance:.2f} грн")
+    total_income = sum(i['amount'] for i in incomes.get(chat_id, []))
+    total_expense = sum(e['amount'] for e in expenses.get(chat_id, []))
+    balance = total_income - total_expense
+    bot.send_message(message.chat.id, f"💰 Ваш баланс: {balance:.2f} грн")
 
-# ---------- МОЇ ВИТРАТИ ----------
-@bot.message_handler(func=lambda m: m.text == "Мої витрати")
-def my_expenses(message):
+@bot.message_handler(func=lambda message: message.text == 'Мої витрати')
+def show_expenses(message):
     chat_id = str(message.chat.id)
-    items = expenses.get(chat_id, [])[-5:]
-    if not items:
-        bot.send_message(message.chat.id, "ℹ️ Немає витрат")
+    user_expenses = expenses.get(chat_id, [])[-10:]
+    if not user_expenses:
+        bot.send_message(message.chat.id, "У вас ще немає витрат.")
     else:
-        text = "🧾 Останні витрати:\n" + "\n".join([f"{e['amount']} грн - {e['date'][:10]}" for e in items])
-        bot.send_message(message.chat.id, text)
+        msg = "Останні витрати:\n"
+        for e in user_expenses:
+            msg += f"{e['date'][:10]} — {e['amount']:.2f} грн\n"
+        bot.send_message(message.chat.id, msg)
 
-# ---------- ЦІЛЬ ----------
-@bot.message_handler(func=lambda m: m.text == "Моя ціль")
-def goal_status(message):
+@bot.message_handler(func=lambda message: message.text == 'Статистика')
+def show_statistics(message):
     chat_id = str(message.chat.id)
-    goal = savings_goals.get(chat_id)
-    if goal:
-        total_exp = sum(e['amount'] for e in expenses.get(chat_id, []))
-        total_inc = sum(i['amount'] for i in incomes.get(chat_id, []))
-        balance = total_inc - total_exp
-        progress = min(balance / goal * 100, 100)
-        bot.send_message(message.chat.id, f"🎯 Ваша ціль: {goal} грн\nПрогрес: {progress:.2f}%")
-    else:
-        bot.send_message(message.chat.id, "🎯 У вас немає встановленої цілі. Введіть /goal_set щоб встановити.")
+    user_expenses = expenses.get(chat_id, [])
+    if not user_expenses:
+        bot.send_message(message.chat.id, "Статистика недоступна. Немає витрат.")
+        return
 
-@bot.message_handler(commands=['goal_set'])
-def set_goal(message):
-    chat_id = message.chat.id
-    bot.send_message(chat_id, "🎯 Введіть суму вашої цілі:")
-    user_temp_data[chat_id] = {'step': 'awaiting_goal_amount'}
+    dates = [e['date'][:10] for e in user_expenses]
+    amounts = [e['amount'] for e in user_expenses]
 
-@bot.message_handler(func=lambda m: user_temp_data.get(m.chat.id, {}).get('step') == 'awaiting_goal_amount')
-def save_goal(message):
-    chat_id = str(message.chat.id)
-    try:
-        goal = float(message.text)
-        savings_goals[chat_id] = goal
-        save_data()
-        user_temp_data.pop(message.chat.id, None)
-        bot.send_message(message.chat.id, f"🎯 Ціль встановлена: {goal:.2f} грн")
-    except ValueError:
-        bot.send_message(message.chat.id, "❌ Введіть коректне число.")
+    plt.figure(figsize=(8, 4))
+    plt.plot(dates, amounts, marker='o')
+    plt.title('Ваші витрати')
+    plt.xlabel('Дата')
+    plt.ylabel('Сума (грн)')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    filename = f"stat_{chat_id}.png"
+    plt.savefig(filename)
+    plt.close()
 
-# ---------- ВИДАЛИТИ ОСТАННЮ ВИТРАТУ ----------
-@bot.message_handler(func=lambda m: m.text == "Видалити останню")
-def delete_last(message):
-    chat_id = str(message.chat.id)
-    if expenses.get(chat_id):
-        last = expenses[chat_id].pop()
-        save_data()
-        bot.send_message(message.chat.id, f"❌ Видалено: {last['amount']} грн")
-    else:
-        bot.send_message(message.chat.id, "ℹ️ Немає витрат для видалення.")
+    with open(filename, 'rb') as photo:
+        bot.send_photo(message.chat.id, photo, caption="📊 Графік витрат")
 
-# ---------- КАТЕГОРІЇ (тимчасово заглушка) ----------
-@bot.message_handler(func=lambda m: m.text == "Категорії")
-def show_categories(message):
-    bot.send_message(message.chat.id, "🔧 Категорії ще не реалізовані.")
+    os.remove(filename)
 
-# ---------- ОБРОБКА ВСЬОГО ІНШОГО ----------
-@bot.message_handler(func=lambda m: True)
-def fallback(message):
-    bot.send_message(message.chat.id, "❓ Команду не розпізнано. Оберіть дію з меню.")
-
-print("🤖 Бот запущено...")
 bot.polling(none_stop=True)
