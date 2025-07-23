@@ -79,12 +79,14 @@ def handle_goal_command(message):
     args = message.text.strip().split()
 
     if len(args) == 2:
-        param = args[1].lower()
-        if param == 'set' or param == 'edit':
+        cmd = args[1].lower()
+
+        if cmd == 'set' or cmd == 'edit':
             bot.send_message(chat_id, "📝 Введи суму для цілі (наприклад, 10000):")
             user_temp_data[chat_id] = {'step': 'set_goal'}
             return
-        elif param == 'delete':
+
+        elif cmd == 'delete':
             if chat_id in saving_goals:
                 saving_goals.pop(chat_id)
                 save_data()
@@ -92,15 +94,16 @@ def handle_goal_command(message):
             else:
                 bot.send_message(chat_id, "⚠️ У вас немає встановленої цілі.")
             return
+
         else:
             try:
-                goal = float(param)
+                goal = float(cmd)
                 saving_goals[chat_id] = goal
                 save_data()
                 bot.send_message(chat_id, f"✅ Ціль встановлено: {goal:.2f} грн")
                 return
             except:
-                bot.send_message(chat_id, "❌ Неправильний формат. Введи /goal 10000 або /goal set")
+                bot.send_message(chat_id, "❌ Невірний формат. Напишіть /goal 10000 або /goal set")
                 return
 
     # Якщо просто /goal
@@ -109,15 +112,10 @@ def handle_goal_command(message):
         spent = sum(e['amount'] for e in expenses.get(chat_id, []))
         percent = min(100, spent / goal * 100)
         left = max(0, goal - spent)
-        bot.send_message(chat_id,
-            f"🎯 Ваша ціль: {goal:.2f} грн\n"
-            f"💸 Витрачено: {spent:.2f} грн\n"
-            f"📊 Прогрес: {percent:.1f}%\n"
-            f"🔒 Залишилось: {left:.2f} грн\n\n"
-            f"Використай:\n/goal set — змінити\n/goal delete — видалити"
-        )
+        bot.send_message(chat_id, f"🎯 Ваша ціль: {goal:.2f} грн\n💸 Витрачено: {spent:.2f} грн\n📊 Прогрес: {percent:.1f}%\n🔒 Залишилось: {left:.2f} грн\n\nВикористай:\n/goal edit — змінити\n/goal delete — видалити")
     else:
         bot.send_message(chat_id, "🎯 У вас немає встановленої цілі. Введіть /goal set або /goal 10000 щоб встановити.")
+
 
 
 # === Обробка введеної цілі ===
